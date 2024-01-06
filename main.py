@@ -15,7 +15,19 @@ def main():
         os.makedirs(images_dir)
 
     london_boroughs = [
-        "Newham (London Borough)" "Tower Hamlets (London Borough)",
+        "Newham (London Borough)",
+        "Tower Hamlets (London Borough)",
+        "Hackney (London Borough)",
+        "Southwark (London Borough)",
+        "Lambeth (London Borough)",
+        "Battersea, South West London",
+        "Kensington And Chelsea (Royal Borough)",
+        "Hammersmith And Fulham (London Borough)",
+        "Richmond Upon Thames (London Borough)",
+        "Islington (London Borough)",
+        "Brent (London Borough)",
+        "Haringey (London Borough)",
+        "Merton (London Borough)",
     ]
 
     final_properties = []
@@ -24,7 +36,7 @@ def main():
         logging.info(f"Processing borough: {borough}")
         try:
             # Initialize the scraper
-            scraper = RightmoveScraper(borough, "2500", "3000", "2", "3", 2, "flat")
+            scraper = RightmoveScraper(borough, "2500", "2800", "2", "3", 2, "flat")
 
             # Perform the search and get property URLs
             scraper.perform_search()
