@@ -9,7 +9,7 @@ import re
 
 
 class FloorplanAnalyser:
-    def __init__(self, model="deepset/roberta-base-squad2"):
+    def __init__(self, model="deepset/deberta-v3-large-squad2"):
         self.model = pipeline("question-answering", model=model)
 
     def download_image(self, image_url, filename):
@@ -78,7 +78,7 @@ class FloorplanAnalyser:
         return pytesseract.image_to_string(image).strip()
 
     def get_answer(self, question, context):
-        answer = self.model(question=question, context=context)["answer"]
+        answer = self.model(question=question, context=context)["answer"].strip()
         print(answer)
         # Regular expression to match both integers and floats
         matches = re.findall(r"\d+\.\d+|\d+", answer)

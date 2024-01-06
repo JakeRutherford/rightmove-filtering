@@ -1,7 +1,11 @@
+import logging
 from rightmove_scraper import RightmoveScraper
 from floorplan_analyser import FloorplanAnalyser
 import pandas as pd
 import os
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def main():
@@ -10,38 +14,56 @@ def main():
     if not os.path.exists(images_dir):
         os.makedirs(images_dir)
 
-    # Initialize the scraper
-    scraper = RightmoveScraper("London", "3000", "3000", "3", "3", 2, "Flats / Apartments")
-
-    # Perform the search and get property URLs
-    scraper.perform_search()
-    property_urls = scraper.get_property_urls()
-    scraper.close()
-
-    # Initialize floorplan analyzer and question answering
-    analyser = FloorplanAnalyser()
+    london_boroughs = [
+        "Newham (London Borough)" "Tower Hamlets (London Borough)",
+    ]
 
     final_properties = []
 
-    for property_url in property_urls:
-        property_number = property_url.split("/properties/")[1].split("/")[0].strip("#")
-        floorplan_image_path = os.path.join("images", f"{property_number}.jpeg")
+    for borough in london_boroughs:
+        logging.info(f"Processing borough: {borough}")
+        try:
+            # Initialize the scraper
+            scraper = RightmoveScraper(borough, "2500", "3000", "2", "3", 2, "flat")
 
-        # Check if the image already exists
-        if not os.path.exists(floorplan_image_path):
-            print("Checking ", floorplan_image_path)
-            analyser.download_property_floorplan(property_url, floorplan_image_path)
+            # Perform the search and get property URLs
+            scraper.perform_search()
+            property_details = scraper.get_property_details()
+            scraper.close()
+        except Exception as e:
+            logging.error(f"Error processing {borough}: {e}")
+            continue
 
-        text = analyser.transcribe_image(floorplan_image_path)
-        if text:
-            floor_space = analyser.get_answer("What is the total gross internal area in square feet (sq ft)?", text)
-            if floor_space >= 780.0:
-                final_properties.append((property_url, floor_space))
+        # Initialize floorplan analyzer and question answering
+        analyser = FloorplanAnalyser()
 
-    # Create a DataFrame and save to CSV
-    df = pd.DataFrame(final_properties)
-    df.columns = ["Property URL", "Square Feet"]
-    df.to_csv("properties.csv", index=False)
+        for property_detail in property_details:
+            property_number = property_detail["url"].split("/properties/")[1].split("/")[0].strip("#")
+            floorplan_image_path = os.path.join("images", f"{property_number}.jpeg")
+
+            # Check if the image already exists
+            if not os.path.exists(floorplan_image_path):
+                print("Checking ", floorplan_image_path)
+                analyser.download_property_floorplan(property_detail["url"], floorplan_image_path)
+
+            text = analyser.transcribe_image(floorplan_image_path)
+            if text:
+                area = analyser.get_answer("What is the total gross internal floor area in square feet (sq ft)?", text)
+                property_detail.update({"area": area})
+                if area >= 780.0:
+                    final_properties.append(property_detail)
+
+        logging.info(f"Properties found so far: {len(final_properties)}")
+
+    logging.info(f"Total properties found: {len(final_properties)}")
+
+    if len(final_properties) > 0:
+        # Create a DataFrame and save to CSV
+        df = pd.DataFrame(final_properties)
+        df.sort_values(by=["price_pcm", "area"], ascending=[False, False], inplace=True)
+        df.to_csv("properties.csv", index=False)
+    else:
+        logging.info("No properties found.")
 
 
 if __name__ == "__main__":
