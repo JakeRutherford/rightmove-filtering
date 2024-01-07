@@ -24,7 +24,7 @@ class FloorplanAnalyser:
             with open(filename, "wb") as file:
                 file.write(response.content)
 
-            print(f"Image downloaded and saved as {filename}")
+            # print(f"Image downloaded and saved as {filename}")
         except requests.HTTPError as http_err:
             print(f"HTTP error occurred: {http_err}")
         except Exception as err:
@@ -79,7 +79,7 @@ class FloorplanAnalyser:
 
     def get_answer(self, question, context):
         answer = self.model(question=question, context=context)["answer"].strip()
-        print(answer)
+        # print(answer)
         # Regular expression to match both integers and floats
         matches = re.findall(r"\d+\.\d+|\d+", answer)
 
