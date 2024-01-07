@@ -70,6 +70,10 @@ def main():
             continue
 
         for property_detail in property_details:
+
+            if not travel_analyser.is_within_isochrone(property_detail["address"]):
+                continue
+
             property_number = property_detail["url"].split("/properties/")[1].split("/")[0].strip("#")
             floorplan_image_path = os.path.join("images", f"{property_number}.jpeg")
 
@@ -84,10 +88,8 @@ def main():
 
             area = floorplan_analyser.get_answer("What is the total gross internal floor area in square feet (sq ft)?", text)
             property_detail.update({"area": area})
-            if area < 780.0:
-                continue
 
-            if not travel_analyser.is_within_isochrone(property_detail["address"]):
+            if area < 780.0:
                 continue
 
             final_properties.append(property_detail)
@@ -99,7 +101,7 @@ def main():
     if len(final_properties) > 0:
         # Create a DataFrame and save to CSV
         df = pd.DataFrame(final_properties)
-        df.sort_values(by=["price_pcm", "area"], ascending=[False, False], inplace=True)
+        df.sort_values(by=["price_pcm", "area"], ascending=[True, False], inplace=True)
         df.drop_duplicates(subset=["url"], inplace=True)
         df.to_csv("properties.csv", index=False)
     else:

@@ -41,13 +41,3 @@ class IsochroneMapAnalyser:
 
         point = Point(location.longitude, location.latitude)
         return self.isochrone_map.contains(point)
-
-
-# Example usage
-try:
-    analyzer = IsochroneMapAnalyzer()
-    analyzer.create_isochrone_map("Holborn, London", 1800)  # 30 minutes
-    is_within = analyzer.is_within_isochrone("Stratford, E15 1DS")
-    print(f"Is Stratford within 30 minutes of Holborn? {is_within}")
-except Exception as e:
-    print(f"Error: {e}")
