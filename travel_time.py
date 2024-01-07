@@ -4,6 +4,11 @@ from requests.structures import CaseInsensitiveDict
 from geopy.geocoders import Nominatim
 from shapely.geometry import shape, Point
 from dotenv import load_dotenv
+import logging
+import re
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class IsochroneMapAnalyser:
@@ -31,13 +36,30 @@ class IsochroneMapAnalyser:
 
         self.isochrone_map = shape(response.json()["features"][0]["geometry"])
 
+    def process_address(self, address):
+        # Regex pattern for a full UK postcode
+        postcode_pattern = r"\b([Gg][Ii][Rr] 0[Aa]{2})|((([A-Za-z][0-9]{1,2})|(([A-Za-z][A-Ha-hJ-Yj-y][0-9]{1,2})|(([A-Za-z][0-9][A-Za-z])|([A-Za-z][A-Ha-hJ-Yj-y][0-9]?[A-Za-z]))))\s?[0-9][A-Za-z]{2})\b"
+
+        # Search for the postcode in the address
+        match = re.search(postcode_pattern, address)
+        if match:
+            # Full postcode found, return the address as is
+            return address
+        else:
+            # Remove partial postcode (if any) from the address
+            cleaned_address = re.sub(r"\b[A-Za-z]{1,2}[0-9]{1,2}\b", "", address).strip()
+            return cleaned_address
+
     def is_within_isochrone(self, address):
         if not self.isochrone_map:
             raise ValueError("Isochrone map not created. Call create_isochrone_map first.")
 
+        address = self.process_address(address)
+
         location = self.geolocator.geocode(address)
         if not location:
-            raise ValueError(f"Unable to geocode address: {address}")
+            logging.info(f"Unable to geocode address: {address}")
+            return "unknown"
 
         point = Point(location.longitude, location.latitude)
         return self.isochrone_map.contains(point)

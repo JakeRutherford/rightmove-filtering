@@ -53,7 +53,7 @@ def main():
             # Initialize the scraper
             scraper = RightmoveScraper(
                 location=borough,
-                min_price="2500",
+                min_price="2400",
                 max_price="2800",
                 min_bedrooms="2",
                 max_bedrooms="3",
@@ -70,8 +70,8 @@ def main():
             continue
 
         for property_detail in property_details:
-
-            if not travel_analyser.is_within_isochrone(property_detail["address"]):
+            within_travel_time = travel_analyser.is_within_isochrone(property_detail["address"])
+            if not within_travel_time:
                 continue
 
             property_number = property_detail["url"].split("/properties/")[1].split("/")[0].strip("#")
@@ -87,10 +87,11 @@ def main():
                 continue
 
             area = floorplan_analyser.get_answer("What is the total gross internal floor area in square feet (sq ft)?", text)
-            property_detail.update({"area": area})
 
-            if area < 780.0:
+            if area < 795.0:
                 continue
+
+            property_detail.update({"area": area, "within_travel_time": within_travel_time})
 
             final_properties.append(property_detail)
 
