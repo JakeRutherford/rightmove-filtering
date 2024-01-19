@@ -4,61 +4,43 @@ from floorplan_analyser import FloorplanAnalyser
 from travel_time import IsochroneMapAnalyser
 import pandas as pd
 import os
+import yaml
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
+def load_config(config_file):
+    with open(config_file, "r") as file:
+        return yaml.safe_load(file)
+
+
 def main():
+    config = load_config("config.yaml")
+
     # Create 'images' directory if it doesn't exist
-    images_dir = "images"
-    if not os.path.exists(images_dir):
-        os.makedirs(images_dir)
-
-    london_boroughs = [
-        "Newham (London Borough)",
-        "Tower Hamlets (London Borough)",
-        "Hackney (London Borough)",
-        "Southwark (London Borough)",
-        "Lambeth (London Borough)",
-        "Battersea, South West London",
-        "Kensington And Chelsea (Royal Borough)",
-        "Hammersmith And Fulham (London Borough)",
-        "Richmond Upon Thames (London Borough)",
-        "Islington (London Borough)",
-        "Brent (London Borough)",
-        "Haringey (London Borough)",
-        "Merton (London Borough)",
-        "Greenwich, South East London",
-        "Barnet (London Borough)",
-        "Harrow (London Borough)",
-        "Hillingdon (London Borough)",
-        "Hounslow (London Borough)",
-        "City Of London (London Borough)",
-        "Westminster (City of)",
-    ]
-
-    target_location = "Kingsway, London, WC2B 6AH"
+    if not os.path.exists(config["images_directory"]):
+        os.makedirs(config["images_directory"])
 
     # Initialize floorplan analyser and travel time analyser
     floorplan_analyser = FloorplanAnalyser()
     travel_analyser = IsochroneMapAnalyser()
-    travel_analyser.create_isochrone_map(target_location, 2700)  # 45 minutes
+    travel_analyser.create_isochrone_map(config["target_location"], config["travel_time_radius"])
 
     final_properties = []
 
-    for borough in london_boroughs:
+    for borough in config["london_boroughs"]:
         logging.info(f"Processing borough: {borough}")
         try:
             # Initialize the scraper
             scraper = RightmoveScraper(
                 location=borough,
-                min_price="2400",
-                max_price="2800",
-                min_bedrooms="2",
-                max_bedrooms="3",
-                min_bathrooms=2,
-                property_type="flat",
+                min_price=config["scraper_settings"]["min_price"],
+                max_price=config["scraper_settings"]["max_price"],
+                min_bedrooms=config["scraper_settings"]["min_bedrooms"],
+                max_bedrooms=config["scraper_settings"]["max_bedrooms"],
+                min_bathrooms=config["scraper_settings"]["min_bathrooms"],
+                property_type=config["scraper_settings"]["property_type"],
             )
 
             # Perform the search and get property URLs
@@ -81,14 +63,9 @@ def main():
             if not os.path.exists(floorplan_image_path):
                 floorplan_analyser.download_property_floorplan(property_detail["url"], floorplan_image_path)
 
-            text = floorplan_analyser.transcribe_image(floorplan_image_path)
+            area = floorplan_analyser.get_answer(config["qa_prompt"], floorplan_image_path)
 
-            if not text:
-                continue
-
-            area = floorplan_analyser.get_answer("What is the total gross internal floor area in square feet (sq ft)?", text)
-
-            if area < 795.0:
+            if area < config["floorplan_area_threshold"]:
                 continue
 
             property_detail.update({"area": area, "within_travel_time": within_travel_time})

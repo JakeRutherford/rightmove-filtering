@@ -1,6 +1,4 @@
 import requests
-from PIL import Image
-import pytesseract
 from transformers import pipeline
 import requests
 import json
@@ -9,8 +7,8 @@ import re
 
 
 class FloorplanAnalyser:
-    def __init__(self, model="deepset/deberta-v3-large-squad2"):
-        self.model = pipeline("question-answering", model=model)
+    def __init__(self, model="impira/layoutlm-document-qa", task="document-question-answering"):
+        self.model = pipeline(model=model, task=task)
 
     def download_image(self, image_url, filename):
         try:
@@ -70,16 +68,14 @@ class FloorplanAnalyser:
 
         self.download_image(floorplan_image_url, image_path)
 
-    def transcribe_image(self, image_path):
-        # Open the image with Pillow
-        image = Image.open(image_path)
+    def get_answer(self, question, image_path):
+        answer = self.model(image=image_path, question=question)
 
-        # Use Tesseract to do OCR on the image
-        return pytesseract.image_to_string(image).strip()
+        if not answer:
+            return 0.0
 
-    def get_answer(self, question, context):
-        answer = self.model(question=question, context=context)["answer"].strip()
-        # print(answer)
+        answer = max(answer, key=lambda x: x["score"])["answer"].strip()
+
         # Regular expression to match both integers and floats
         matches = re.findall(r"\d+\.\d+|\d+", answer)
 
