@@ -1,9 +1,9 @@
 # config.yaml
 images_directory: "images"
 target_location: "Kingsway, London, E15 1DA"
-travel_time_radius: 1800  # in seconds
+travel_time_radius: 2000  # in seconds
 london_boroughs:
-  - "North London"
+  - "Newham (London Borough)"
   # Add other boroughs as needed
 scraper_settings:
   min_price: "2400"

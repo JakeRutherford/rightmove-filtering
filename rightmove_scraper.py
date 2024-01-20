@@ -9,13 +9,35 @@ from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
 import re
+from typing import List, Optional, Dict
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class RightmoveScraper:
-    def __init__(self, location, min_price, max_price, min_bedrooms, max_bedrooms, min_bathrooms, property_type):
+    def __init__(
+        self,
+        location: str,
+        min_price: int,
+        max_price: int,
+        min_bedrooms: int,
+        max_bedrooms: int,
+        min_bathrooms: int,
+        property_type: str,
+    ) -> None:
+        """
+        Initialize the RightmoveScraper with search criteria for property listings.
+
+        Args:
+        location (str): The location for the property search.
+        min_price (int): Minimum price for the property search.
+        max_price (int): Maximum price for the property search.
+        min_bedrooms (int): Minimum number of bedrooms required.
+        max_bedrooms (int): Maximum number of bedrooms required.
+        min_bathrooms (int): Minimum number of bathrooms required.
+        property_type (str): Type of property (e.g., 'flat', 'house').
+        """
         self.location = location
         self.min_price = min_price
         self.max_price = max_price
@@ -26,12 +48,21 @@ class RightmoveScraper:
         self.driver = self._init_driver()
         self.wait = WebDriverWait(self.driver, 10)
 
-    def _init_driver(self):
+    def _init_driver(self) -> webdriver.Chrome:
+        """
+        Initializes and returns a Chrome WebDriver.
+
+        Returns:
+        WebDriver: An instance of Chrome WebDriver.
+        """
         # Set up Chrome options
         chrome_options = webdriver.ChromeOptions()
         return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
-    def accept_cookies(self):
+    def accept_cookies(self) -> None:
+        """
+        Accepts cookies on the Rightmove website by clicking the 'Accept all' button.
+        """
         # Wait for the cookie popup to be present and then locate the 'Accept all' button
         wait = WebDriverWait(self.driver, 10)
         accept_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[text()="Accept all"]')))
@@ -39,7 +70,13 @@ class RightmoveScraper:
         # Click the 'Accept all' button
         accept_button.click()
 
-    def get_location_identifier(self):
+    def get_location_identifier(self) -> str:
+        """
+        Retrieves the location identifier from Rightmove based on the search location.
+
+        Returns:
+        str: The location identifier if found.
+        """
         # Perform initial search to get the location identifier
         self.driver.get("https://www.rightmove.co.uk")
 
@@ -58,25 +95,40 @@ class RightmoveScraper:
 
         # Extract location identifier from URL
         location_identifier_match = re.search(r"locationIdentifier=([^&]+)", current_url)
-        return location_identifier_match.group(1) if location_identifier_match else None
+        return location_identifier_match.group(1) if location_identifier_match else ""
 
-    def construct_search_url(self):
+    def construct_search_url(self) -> str:
+        """
+        Constructs the search URL for the property listing based on the given criteria.
+
+        Returns:
+        str: The constructed search URL if possible.
+        """
         location_identifier = self.get_location_identifier()
         if location_identifier:
             search_url = f"https://www.rightmove.co.uk/property-to-rent/find.html?locationIdentifier={location_identifier}&maxBedrooms={self.max_bedrooms}&minBedrooms={self.min_bedrooms}&maxPrice={self.max_price}&minPrice={self.min_price}&propertyTypes={self.property_type}&includeLetAgreed=false&mustHave=&dontShow=houseShare%2Cretirement%2Cstudent&furnishTypes=&keywords="
             logging.info(f"Constructed search URL: {search_url}")
             return search_url
         logging.warning("Failed to construct search URL. Check location identifier.")
-        return None
+        return ""
 
-    def perform_search(self):
+    def perform_search(self) -> None:
+        """
+        Navigates to the constructed search URL and initiates the property search.
+        """
         search_url = self.construct_search_url()
         if search_url:
             self.driver.get(search_url)
         else:
             logging.error("Search URL is not available.")
 
-    def get_property_details(self):
+    def get_property_details(self) -> List[Dict[str, str]]:
+        """
+        Scrapes property details from the search results pages.
+
+        Returns:
+        List[Dict[str, str]]: A list of dictionaries, each containing details of a property.
+        """
         # Initialize an empty list to store property details
         property_details = []
 
@@ -145,5 +197,8 @@ class RightmoveScraper:
 
         return property_details
 
-    def close(self):
+    def close(self) -> None:
+        """
+        Closes the WebDriver session.
+        """
         self.driver.quit()
