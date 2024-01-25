@@ -5,8 +5,7 @@ from geopy.geocoders import Nominatim
 from shapely.geometry import shape, Point
 from dotenv import load_dotenv
 import logging
-import re
-from typing import Tuple, Union
+from typing import Union
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -54,26 +53,6 @@ class IsochroneMapAnalyser:
 
         self.isochrone_map = shape(response.json()["features"][0]["geometry"])
 
-    def process_address(self, address: str) -> str:
-        """
-        Processes the given address, extracting or cleaning the postcode.
-
-        Args:
-        address (str): The address to be processed.
-
-        Returns:
-        str: The processed address.
-        """
-        # Regex pattern for a full UK postcode
-        postcode_pattern = r"\b([Gg][Ii][Rr] 0[Aa]{2})|((([A-Za-z][0-9]{1,2})|(([A-Za-z][A-Ha-hJ-Yj-y][0-9]{1,2})|(([A-Za-z][0-9][A-Za-z])|([A-Za-z][A-Ha-hJ-Yj-y][0-9]?[A-Za-z]))))\s?[0-9][A-Za-z]{2})\b"
-
-        match = re.search(postcode_pattern, address)
-        if match:
-            return address
-        else:
-            cleaned_address = re.sub(r"\b[A-Za-z]{1,2}[0-9]{1,2}\b", "", address).strip()
-            return cleaned_address
-
     def is_within_isochrone(self, address: str) -> Union[bool, str]:
         """
         Checks if the given address is within the previously created isochrone map.
@@ -89,8 +68,6 @@ class IsochroneMapAnalyser:
         """
         if not self.isochrone_map:
             raise ValueError("Isochrone map not created. Call create_isochrone_map first.")
-
-        address = self.process_address(address)
 
         location = self.geolocator.geocode(address)
         if not location:

@@ -5,6 +5,7 @@ from travel_time import IsochroneMapAnalyser
 import pandas as pd
 import os
 import yaml
+from tqdm import tqdm
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -22,10 +23,17 @@ def main():
     if not os.path.exists(config["images_directory"]):
         os.makedirs(config["images_directory"])
 
-    # Initialize floorplan analyser and travel time analyser
+    # Initialize floorplan analyser
     floorplan_analyser = FloorplanAnalyser()
-    travel_analyser = IsochroneMapAnalyser()
-    travel_analyser.create_isochrone_map(config["target_location"], config["travel_time_radius"])
+
+    # Initialize travel time analyser only if target location is provided
+    travel_analyser = None
+    if "target_location" in config and config["target_location"]:
+        logging.info("Using travel time analysis.")
+        travel_analyser = IsochroneMapAnalyser()
+        travel_analyser.create_isochrone_map(config["target_location"], config["travel_time_radius"])
+    else:
+        logging.info("No target location provided. Not using travel time analysis.")
 
     final_properties = []
 
@@ -41,18 +49,25 @@ def main():
                 max_bedrooms=config["scraper_settings"]["max_bedrooms"],
                 min_bathrooms=config["scraper_settings"]["min_bathrooms"],
                 property_type=config["scraper_settings"]["property_type"],
+                min_let_date=config["scraper_settings"]["min_let_date"],
             )
 
             # Perform the search and get property URLs
             scraper.perform_search()
             property_details = scraper.get_property_details()
-            scraper.close()
+            # scraper.close()
         except Exception as e:
             logging.error(f"Error processing {borough}: {e}")
             continue
 
-        for property_detail in property_details:
-            within_travel_time = travel_analyser.is_within_isochrone(property_detail["address"])
+        logging.info(f"Found {len(property_details)} potential properties. Performing additional filtering.")
+
+        for property_detail in tqdm(property_details):
+            # Perform travel time analysis if analyser is initialized
+            within_travel_time = True
+            if travel_analyser:
+                within_travel_time = travel_analyser.is_within_isochrone(property_detail["address"])
+
             if not within_travel_time:
                 continue
 
@@ -68,11 +83,15 @@ def main():
             if area < config["floorplan_area_threshold"]:
                 continue
 
+            if not scraper.meets_criteria(property_detail["url"]):
+                continue
+
             property_detail.update({"area": area, "within_travel_time": within_travel_time})
 
             final_properties.append(property_detail)
 
         logging.info(f"Properties found so far: {len(final_properties)}")
+        scraper.close()
 
     logging.info(f"Total properties found: {len(final_properties)}")
 

@@ -3,7 +3,6 @@ from transformers import pipeline
 import json
 from bs4 import BeautifulSoup
 import re
-from typing import Union
 
 
 class FloorplanAnalyser:

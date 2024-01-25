@@ -9,7 +9,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
 import re
-from typing import List, Optional, Dict
+import datetime
+from typing import List, Dict
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -25,6 +26,7 @@ class RightmoveScraper:
         max_bedrooms: int,
         min_bathrooms: int,
         property_type: str,
+        min_let_date: str,
     ) -> None:
         """
         Initialize the RightmoveScraper with search criteria for property listings.
@@ -37,6 +39,7 @@ class RightmoveScraper:
         max_bedrooms (int): Maximum number of bedrooms required.
         min_bathrooms (int): Minimum number of bathrooms required.
         property_type (str): Type of property (e.g., 'flat', 'house').
+        min_let_date (str): Let available date.
         """
         self.location = location
         self.min_price = min_price
@@ -45,6 +48,9 @@ class RightmoveScraper:
         self.max_bedrooms = max_bedrooms
         self.min_bathrooms = min_bathrooms
         self.property_type = property_type
+        self.min_let_date = (
+            datetime.datetime.strptime(min_let_date, "%d/%m/%Y") if min_let_date != "Now" else datetime.datetime.now()
+        )
         self.driver = self._init_driver()
         self.wait = WebDriverWait(self.driver, 10)
 
@@ -87,8 +93,11 @@ class RightmoveScraper:
         )
         search_input.clear()
         search_input.send_keys(self.location)
-        search_input.send_keys(Keys.DOWN)
-        search_input.send_keys(Keys.ENTER)
+        # Wait for the suggestions to appear and click the first button within the ul element
+        first_suggestion_button = self.wait.until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, "ul.ksc_resultsList > li:first-child > button"))
+        )
+        first_suggestion_button.click()
         to_rent_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "To Rent")]')))
         to_rent_button.click()
         current_url = self.driver.current_url
@@ -196,6 +205,85 @@ class RightmoveScraper:
                 ActionChains(self.driver).move_to_element(next_button).click().perform()
 
         return property_details
+
+    def get_property_letting_details(self, url: str) -> Dict[str, str]:
+        """
+        Extracts letting details from a property's page.
+
+        Args:
+        url (str): URL of the property's page.
+
+        Returns:
+        Dict[str, str]: Letting details including available date, furnish type, and let type.
+        """
+        self.driver.get(url)
+
+        # Locate the article element containing "Letting details"
+        article_element = self.wait.until(
+            EC.presence_of_element_located((By.XPATH, '//article[.//h2[contains(text(), "Letting details")]]'))
+        )
+
+        # Extract the details
+        details = {
+            "let_available_date": self._extract_detail(article_element, "Let available date"),
+        }
+        return details
+
+    def _extract_detail(self, parent_element, detail_name: str) -> str:
+        """
+        Extracts a specific detail from the parent element.
+
+        Args:
+        parent_element (WebElement): The parent element containing the details.
+        detail_name (str): The name of the detail to extract.
+
+        Returns:
+        str: The extracted detail.
+        """
+        try:
+            detail_element = parent_element.find_element(
+                By.XPATH, f'.//dt[contains(text(), "{detail_name}")]/following-sibling::dd'
+            )
+            return detail_element.text.strip()
+        except NoSuchElementException:
+            return ""
+
+    def meets_criteria(self, url: str) -> bool:
+        """
+        Checks if a property meets the specified criteria.
+
+        Args:
+        url (str): URL of the property's page.
+
+        Returns:
+        bool: True if the property meets the criteria, False otherwise.
+        """
+        details = self.get_property_letting_details(url)
+
+        # Check let available date
+        let_date_str = details["let_available_date"]
+        if let_date_str != "Ask agent":
+            try:
+                let_date = datetime.datetime.strptime(let_date_str, "%d/%m/%Y")
+                if let_date < self.min_let_date:
+                    return False
+            except ValueError:
+                # Handle invalid date format
+                return False
+
+        return True
+
+    def filter_properties(self, property_urls: List[str]) -> List[str]:
+        """
+        Filters properties based on criteria only on the property page.
+
+        Args:
+        property_urls (List[str]): List of property URLs to process.
+
+        Returns:
+        List[str]: URLs of properties that meet the criteria.
+        """
+        return [url for url in property_urls if self.meets_criteria(url)]
 
     def close(self) -> None:
         """

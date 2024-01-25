@@ -1,16 +1,17 @@
 # config.yaml
 images_directory: "images"
-target_location: "Kingsway, London, E15 1DA"
+target_location: ""
 travel_time_radius: 2000  # in seconds
 london_boroughs:
   - "Newham (London Borough)"
   # Add other boroughs as needed
 scraper_settings:
   min_price: "2400"
-  max_price: "2900"
+  max_price: "3000"
   min_bedrooms: "2"
   max_bedrooms: "3"
   min_bathrooms: 2
   property_type: "flat"
-floorplan_area_threshold: 795.0
+  min_let_date: "04/02/2024"
+floorplan_area_threshold: 800.0
 qa_prompt: "What is the total gross internal floor area in square feet (sq ft)?"
