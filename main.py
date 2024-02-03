@@ -50,6 +50,9 @@ def main():
                 min_bathrooms=config["scraper_settings"]["min_bathrooms"],
                 property_type=config["scraper_settings"]["property_type"],
                 min_let_date=config["scraper_settings"]["min_let_date"],
+                floorplan_required=config["scraper_settings"]["floorplan_required"],
+                max_days_since_added=config["scraper_settings"]["max_days_since_added"],
+                exclude=config["scraper_settings"]["exclude"],
             )
 
             # Perform the search and get property URLs
@@ -71,18 +74,25 @@ def main():
             if not within_travel_time:
                 continue
 
-            property_number = property_detail["url"].split("/properties/")[1].split("/")[0].strip("#")
-            floorplan_image_path = os.path.join("images", f"{property_number}.jpeg")
-
-            # Check if the image already exists
-            if not os.path.exists(floorplan_image_path):
-                floorplan_analyser.download_property_floorplan(property_detail["url"], floorplan_image_path)
-
-            area = floorplan_analyser.get_answer(config["qa_prompt"], floorplan_image_path)
-
-            if area < config["floorplan_area_threshold"]:
+            if config["scraper_settings"]["floorplan_required"] and not property_detail["has_floorplan"]:
                 continue
 
+            area = 0
+            if property_detail["has_floorplan"]:
+                logging.info("Checking floorplan.")
+                property_number = property_detail["url"].split("/properties/")[1].split("/")[0].strip("#")
+                floorplan_image_path = os.path.join("images", f"{property_number}.jpeg")
+
+                # Check if the image already exists
+                if not os.path.exists(floorplan_image_path):
+                    floorplan_analyser.download_property_floorplan(property_detail["url"], floorplan_image_path)
+
+                area = floorplan_analyser.get_answer(config["qa_prompt"], floorplan_image_path)
+
+                if area < config["floorplan_area_threshold"]:
+                    continue
+
+            logging.info("Checking additional criteria.")
             if not scraper.meets_criteria(property_detail["url"]):
                 continue
 
@@ -93,13 +103,13 @@ def main():
         logging.info(f"Properties found so far: {len(final_properties)}")
         scraper.close()
 
-    logging.info(f"Total properties found: {len(final_properties)}")
-
     if len(final_properties) > 0:
         # Create a DataFrame and save to CSV
         df = pd.DataFrame(final_properties)
         df.sort_values(by=["price_pcm", "area"], ascending=[True, False], inplace=True)
         df.drop_duplicates(subset=["url"], inplace=True)
+        logging.info(f"Total properties found: {len(df)}")
+        df = df[["url", "has_floorplan", "price_pcm", "bedrooms", "bathrooms", "address", "area", "within_travel_time"]]
         df.to_csv("properties.csv", index=False)
     else:
         logging.info("No properties found.")

@@ -5,9 +5,9 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
+from utils import word_ngrams
 import re
 import datetime
 from typing import List, Dict
@@ -27,6 +27,9 @@ class RightmoveScraper:
         min_bathrooms: int,
         property_type: str,
         min_let_date: str,
+        floorplan_required: bool,
+        max_days_since_added: str,
+        exclude: list[str],
     ) -> None:
         """
         Initialize the RightmoveScraper with search criteria for property listings.
@@ -40,6 +43,9 @@ class RightmoveScraper:
         min_bathrooms (int): Minimum number of bathrooms required.
         property_type (str): Type of property (e.g., 'flat', 'house').
         min_let_date (str): Let available date.
+        floorplan_required (bool): Is a floorplan required?
+        max_days_since_added (str): Number of days since property added to site. Valid vaues are "Anytime", 1, 3, 7 and 14.
+        exclude (list): Filter out properties based on these keywords.
         """
         self.location = location
         self.min_price = min_price
@@ -51,6 +57,10 @@ class RightmoveScraper:
         self.min_let_date = (
             datetime.datetime.strptime(min_let_date, "%d/%m/%Y") if min_let_date != "Now" else datetime.datetime.now()
         )
+        self.floorplan_required = floorplan_required
+        self.max_days_since_added = max_days_since_added
+        self.exclude = exclude
+        self.longest_exclude = max([len(x.split()) for x in exclude])
         self.driver = self._init_driver()
         self.wait = WebDriverWait(self.driver, 10)
 
@@ -115,11 +125,30 @@ class RightmoveScraper:
         """
         location_identifier = self.get_location_identifier()
         if location_identifier:
-            search_url = f"https://www.rightmove.co.uk/property-to-rent/find.html?locationIdentifier={location_identifier}&maxBedrooms={self.max_bedrooms}&minBedrooms={self.min_bedrooms}&maxPrice={self.max_price}&minPrice={self.min_price}&propertyTypes={self.property_type}&includeLetAgreed=false&mustHave=&dontShow=houseShare%2Cretirement%2Cstudent&furnishTypes=&keywords="
+            search_url = (
+                f"https://www.rightmove.co.uk/property-to-rent/find.html?"
+                f"locationIdentifier={location_identifier}&"
+                f"maxBedrooms={self.max_bedrooms}&"
+                f"minBedrooms={self.min_bedrooms}&"
+                f"maxPrice={self.max_price}&"
+                f"minPrice={self.min_price}&"
+                f"propertyTypes={self.property_type}&"
+                f"includeLetAgreed=false&"
+                f"mustHave=&"
+                f"dontShow=houseShare%2Cretirement%2Cstudent&"
+                f"furnishTypes=&"
+                f"keywords="
+            )
+
+            # Append maxDaysSinceAdded to the URL if it's a specific value
+            if self.max_days_since_added in ["1", "3", "7", "14"]:
+                search_url += f"&maxDaysSinceAdded={self.max_days_since_added}"
+
             logging.info(f"Constructed search URL: {search_url}")
             return search_url
-        logging.warning("Failed to construct search URL. Check location identifier.")
-        return ""
+        else:
+            logging.warning("Failed to construct search URL. Check location identifier.")
+            return ""
 
     def perform_search(self) -> None:
         """
@@ -130,6 +159,16 @@ class RightmoveScraper:
             self.driver.get(search_url)
         else:
             logging.error("Search URL is not available.")
+
+    def keyword_filtering(self, text: str) -> bool:
+        """
+        Checks if the provided text contains any of the excluded keywords.
+        """
+        n_grams = word_ngrams(text, self.longest_exclude)
+        if n_grams & set(self.exclude):
+            return True
+        else:
+            return False
 
     def get_property_details(self) -> List[Dict[str, str]]:
         """
@@ -153,15 +192,30 @@ class RightmoveScraper:
             # Iterate over the properties
             for property in properties:
                 try:
+                    # Extract address
+                    address_element = property.find_element(By.CSS_SELECTOR, "address.propertyCard-address")
+                    address = address_element.text
+
+                    # Filter out properties if their address contains an excluded keyword
+                    if self.keyword_filtering(address):
+                        logging.info(f"Filter out {address}")
+                        continue
+
                     # Check if the property has enough bathrooms
                     bathroom_icon = property.find_element(By.CSS_SELECTOR, "span.no-svg-bathroom-icon + span.text")
                     num_bathrooms = int(bathroom_icon.get_attribute("textContent"))
 
-                    # Check if the property card mentions a floorplan
-                    floorplan_element = property.find_element(By.CSS_SELECTOR, 'a[data-test="property-floorplan-icon"]')
+                    try:
+                        # Check if the property card mentions a floorplan
+                        floorplan_element = property.find_element(By.CSS_SELECTOR, 'a[data-test="property-floorplan-icon"]')
+                    except NoSuchElementException:
+                        if self.floorplan_required:
+                            continue
+                        else:
+                            floorplan_element = None
 
-                    # Process only if the property has enough bathrooms and a floorplan
-                    if num_bathrooms >= self.min_bathrooms and floorplan_element:
+                    # Process only if the property has enough bathrooms
+                    if num_bathrooms >= self.min_bathrooms:
                         # Extract property URL
                         property_url_element = property.find_element(By.CSS_SELECTOR, "a.propertyCard-link")
                         property_url = property_url_element.get_attribute("href")
@@ -174,13 +228,10 @@ class RightmoveScraper:
                         bedrooms_element = property.find_element(By.CSS_SELECTOR, "span.no-svg-bed-icon + span.text")
                         bedrooms = bedrooms_element.get_attribute("textContent").strip()
 
-                        # Extract address
-                        address_element = property.find_element(By.CSS_SELECTOR, "address.propertyCard-address")
-                        address = address_element.text
-
                         # Append the details to the list
                         property_details.append(
                             {
+                                "has_floorplan": True if floorplan_element else False,
                                 "url": property_url,
                                 "price_pcm": price_pcm,
                                 "bedrooms": bedrooms,
@@ -242,7 +293,8 @@ class RightmoveScraper:
         """
         try:
             detail_element = parent_element.find_element(
-                By.XPATH, f'.//dt[contains(text(), "{detail_name}")]/following-sibling::dd'
+                By.XPATH,
+                f'.//dt[contains(text(), "{detail_name}")]/following-sibling::dd',
             )
             return detail_element.text.strip()
         except NoSuchElementException:
